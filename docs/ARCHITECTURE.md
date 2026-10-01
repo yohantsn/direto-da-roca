@@ -1997,9 +1997,9 @@ T-0.1 depende de A0 decidir org e nome de pacote. Decidido:
 | Item | Valor |
 | --- | --- |
 | Nome do pacote Dart | `direto_da_roca` |
-| `applicationId` Android | `com.yohandev.diretodaroca` |
+| `applicationId` Android | `com.projetodaro.ca` |
 | `<title>` do web | `Direto da Roça` |
-| `namespace` Android | `com.yohandev.diretodaroca` |
+| `namespace` Android | `com.projetodaro.ca` |
 
 O `applicationId` é provisório e **muda quando T-7.0 resolver o domínio**. É barato: o
 application id só vira problema quando entra na Play Store, e isso está fora da v1. O nome do pacote
@@ -2787,11 +2787,13 @@ uso, e um caso de uso que só delega para o repositório é indireção com nome
 nenhuma lógica. Decidi **não criar a pasta**, e criar quando houver lógica real (§11.12). Se A
 preferir manter a pasta vazia na árvore, é cosmético.
 
-### D-f · Nomes e `applicationId` provisórios
+### D-f · `applicationId` — decidedo pelo dono do projeto, não por A0
 
-T-0.1 depende de A0 decidir org e nome (§7.7). O `applicationId` é
-`com.yohandev.diretodaroca` e muda quando T-7.0 resolver o domínio — é barato porque só vira
-problema na Play Store, que está fora da v1. O nome do pacote Dart (`direto_da_roca`) não muda.
+O `applicationId` é **`com.projetodaro.ca`**, escolhido pelo dono do projeto antes do T-0.1,
+e **não** é uma escolha de A0 como este documento supunha. É deliberadamente genérico e
+reversível: a verificação de disponibilidade da marca é a task humana T-7.0, que roda **antes**
+do deploy, e nada aqui presume que "Direto da Roça" esté livre. Só vira problema na Play Store,
+que está fora da v1 (§3). O nome do pacote Dart (`direto_da_roca`) não muda.
 
 ### D-g · Enum de categorias provisório no exemplo
 
