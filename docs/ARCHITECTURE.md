@@ -3,6 +3,19 @@
 Documento normativo do projeto. Onde este texto e o código divergirem, o código está errado
 — ou este documento está desatualizado, o que é um bug do mesmo tamanho.
 
+> **Nota de verificação (2026-09-30).** Os blocos Dart deste documento foram extraídos para
+> arquivos reais e compilados com `dart analyze` em Dart 3.11.5. Isso encontrou **cinco bugs que
+> quebram a compilação** e que um leitor jamais encontraria lendo: o map pattern
+> `{ValidationCode.required}`, que não aceita constante de enum como chave; o
+> `const Stream<E>.empty()`, que não aceita type parameter; o `late StreamController` do
+> `restartable`, cujo `onDone` fecha o controller antes de qualquer evento; o `this.cause` do
+> `DataError`, que redeclara um campo que já existe no pai; e imports faltando em `debounce`,
+> `sequential` e `failure_messages`. Todos corrigidos aqui. `lib/core` compila limpo.
+>
+> Duas entidades continuam **não definidas** de propósito, e cada task as escreve quando chegar:
+> `ListingFilter` e `ListingDraft` (exemplo do repositório) e `ListingDto` (mapper). Estão
+> importadas pelo exemplo mas não têm corpo aqui — é o que T-4.1 e A4 produzem.
+
 ## Fontes que este documento não pode contradizer
 
 | Fonte | O que vem de lá |
@@ -309,14 +322,6 @@ sealed class Failure extends Equatable {
   bool get isRetryable => false;
 }
 
-// ---------------------------------------------------------------------------
-// Transporte
-// ---------------------------------------------------------------------------
-
-/// Não chegamos ao servidor. Distinguir `offline` de `timeout` muda a ação:
-/// offline não adianta repetir agora.
-enum NetworkFailureKind { offline, timeout, dns, unknown }
-
 final class NetworkFailure extends Failure {
   const NetworkFailure(this.kind, {this.retryAfter});
 
@@ -330,9 +335,6 @@ final class NetworkFailure extends Failure {
   List<Object?> get props => [kind, retryAfter];
 }
 
-/// A mensagem do Supabase não é confiável o bastante para virar `Failure`: ela
-/// ecoa valores do usuário e muda de texto entre versões. Este é o canário —
-/// apareceu, o log já tem a causa, a tela mostra texto genérico.
 final class UnknownFailure extends Failure {
   const UnknownFailure({required this.operation, required this.cause});
 
@@ -353,20 +355,6 @@ final class UnknownFailure extends Failure {
   String toString() => 'UnknownFailure(operation: $operation)';
 }
 
-// ---------------------------------------------------------------------------
-// Autenticação e autorização
-// ---------------------------------------------------------------------------
-
-enum AuthFailureReason {
-  invalidCredentials,
-  weakPassword,
-  emailInUse,
-  accountDisabled,
-  providerError,
-  tokenExpired,
-  unknown,
-}
-
 final class AuthFailure extends Failure {
   const AuthFailure({required this.reason, this.email});
 
@@ -380,8 +368,6 @@ final class AuthFailure extends Failure {
   List<Object?> get props => [reason, email];
 }
 
-/// Autenticado, mas sem permissão: "não sou o dono deste anúncio", "a sessão
-/// expirou", "o contato não está liberado para você".
 final class UnauthorizedFailure extends Failure {
   const UnauthorizedFailure({required this.action, this.resourceId});
 
@@ -392,12 +378,6 @@ final class UnauthorizedFailure extends Failure {
   List<Object?> get props => [action, resourceId];
 }
 
-// ---------------------------------------------------------------------------
-// Recurso e limites
-// ---------------------------------------------------------------------------
-
-enum ResourceType { listing, report, profile, image }
-
 final class NotFoundFailure extends Failure {
   const NotFoundFailure({required this.resourceType, required this.resourceId});
 
@@ -407,8 +387,6 @@ final class NotFoundFailure extends Failure {
   @override
   List<Object?> get props => [resourceType, resourceId];
 }
-
-enum RateLimitScope { perIp, perListing, perUser, otp, storage }
 
 final class RateLimitedFailure extends Failure {
   const RateLimitedFailure({required this.scope, this.retryAfter});
@@ -423,8 +401,6 @@ final class RateLimitedFailure extends Failure {
   List<Object?> get props => [scope, retryAfter];
 }
 
-/// Limite de anúncios ativos por usuário (A1). Diferente de `RateLimited` porque
-/// não passa: esperar não resolve, é preciso apagar um anúncio.
 final class QuotaExceededFailure extends Failure {
   const QuotaExceededFailure({required this.limit, required this.current});
 
@@ -434,8 +410,6 @@ final class QuotaExceededFailure extends Failure {
   @override
   List<Object?> get props => [limit, current];
 }
-
-enum AppPermission { location }
 
 final class PermissionDeniedFailure extends Failure {
   const PermissionDeniedFailure({
@@ -451,24 +425,6 @@ final class PermissionDeniedFailure extends Failure {
 
   @override
   List<Object?> get props => [permission, permanentlyDenied];
-}
-
-// ---------------------------------------------------------------------------
-// Validação e mídia
-// ---------------------------------------------------------------------------
-
-/// Código de erro de validação, **não** texto. O texto vem do l10n da
-/// apresentação, indexado por este código — é por isso que `domain` não guarda
-/// string de interface.
-enum ValidationCode {
-  required,
-  tooShort,
-  tooLong,
-  invalidFormat,
-  outOfRange,
-  duplicate,
-  notAccepted,
-  inThePast,
 }
 
 final class ValidationFailure extends Failure {
@@ -497,16 +453,6 @@ final class ValidationFailure extends Failure {
   }
 }
 
-enum StorageFailureReason {
-  tooLarge,
-  wrongType,
-  quotaExceeded,
-  networkDuringUpload,
-  forbidden,
-  aborted,
-  unknown,
-}
-
 final class StorageFailure extends Failure {
   const StorageFailure({required this.reason, this.retryAfter});
 
@@ -522,13 +468,6 @@ final class StorageFailure extends Failure {
 
   @override
   List<Object?> get props => [reason, retryAfter];
-}
-
-enum ImageProcessingFailureReason {
-  decodeFailed,
-  tooManyPixels,
-  unsupportedFormat,
-  exifNotRemoved,
 }
 
 final class ImageProcessingFailure extends Failure {
@@ -549,8 +488,6 @@ final class ImageProcessingFailure extends Failure {
   List<Object?> get props => [reason, sourceWidth, sourceHeight];
 }
 
-enum LaunchTarget { whatsapp, externalBrowser }
-
 final class LaunchFailure extends Failure {
   const LaunchFailure({required this.target});
 
@@ -563,22 +500,6 @@ final class LaunchFailure extends Failure {
   List<Object?> get props => [target];
 }
 
-// ---------------------------------------------------------------------------
-// O caso especial do contato (D1)
-// ---------------------------------------------------------------------------
-
-/// Falha do caminho de contato, e **só** desse caminho.
-///
-/// A Edge Function responde de forma uniforme para "anúncio não existe" e
-/// "limite estourado": mesmo status, mesmo corpo, tempo constante (D1, para não
-/// virar oráculo). A consequência que o cliente tem de aceitar é que **ele não
-/// consegue distinguir os dois casos, e não deve tentar.** Uma `NotFoundFailure`
-/// aqui seria a roubadura de uma informação que o servidor teve o cuidado de não
-/// dar. Os dois casos viram isto, e a tela mostra "não foi possível liberar o
-/// contato agora, tente mais tarde" — texto verdadeiro nos dois.
-///
-/// Consequência para T-4.5: a "mensagem clara" do limite é clara, mas não é
-/// exclusiva. Registrado em "Divergências propostas".
 final class ContactUnavailableFailure extends Failure {
   const ContactUnavailableFailure({this.retryAfter});
 
@@ -587,6 +508,77 @@ final class ContactUnavailableFailure extends Failure {
   @override
   List<Object?> get props => [retryAfter];
 }
+```
+
+```dart
+// lib/core/error/failure_kind.dart
+// Arquivo so de enums. NAO importa failure.dart - se importasse, o ciclo
+// quebraria o `sealed` de 3.2. Todos os enums que os `Failure` referenciam
+// moram aqui.
+enum NetworkFailureKind { offline, timeout, dns, unknown }
+
+enum AuthFailureReason {
+  invalidCredentials,
+  weakPassword,
+  emailInUse,
+  accountDisabled,
+  providerError,
+  tokenExpired,
+  unknown,
+}
+/// A ação que o usuário tentou e não podia. Separate do `AuthFailureReason`,
+/// que é *por que* o login falhou: aqui a sessão existe e o acesso é que foi
+/// negado. Os quatro valores são os que o `switch` exaustivo de §3.5 percorre.
+enum UnauthorizedAction {
+  /// A row existe, mas pertence a outro `owner_id`.
+  notOwner,
+
+  /// O usuário atingiu o teto de anúncios ativos (a regra de T-1.3b).
+  activeListingLimit,
+
+  /// A sessão expirou no meio da operação — diferente de
+  /// `AuthFailureReason.tokenExpired`, que é o refresh que falhou no login.
+  sessionExpired,
+
+  /// O contato não é liberado: consentimento ausente, ou anúncio não ativo.
+  /// Deliberadamente genérico; nomear o motivo aqui viraria o oráculo que D1
+  /// proíbe (ver §3.5).
+  contactNotAllowed,
+}
+
+enum ResourceType { listing, report, profile, image }
+
+enum RateLimitScope { perIp, perListing, perUser, otp, storage }
+
+enum AppPermission { location }
+
+enum ValidationCode {
+  required,
+  tooShort,
+  tooLong,
+  invalidFormat,
+  outOfRange,
+  duplicate,
+  notAccepted,
+  inThePast,
+}
+enum StorageFailureReason {
+  tooLarge,
+  wrongType,
+  quotaExceeded,
+  networkDuringUpload,
+  forbidden,
+  aborted,
+  unknown,
+}
+enum ImageProcessingFailureReason {
+  decodeFailed,
+  tooManyPixels,
+  unsupportedFormat,
+  exifNotRemoved,
+}
+enum LaunchTarget { whatsapp, externalBrowser }
+
 ```
 
 ### 3.3 `Result`
@@ -673,9 +665,12 @@ sealed class DataException implements Exception {
 }
 
 final class DataError extends DataException {
+  // `super.cause` e não `this.cause`: o pai já declara `cause`, e repetir o
+  // parâmetro no construtor do filho dá "initializing formal for non-existent
+  // field". `super.cause` é o que inicializa o campo herdado.
   const DataError({
     required this.kind,
-    required this.cause,
+    required super.cause,
     this.statusCode,
     this.postgresCode,
     this.retryAfter,
@@ -703,7 +698,10 @@ Um `switch` exaustivo em um lugar só. A apresentação é dona do l10n, e é po
 
 ```dart
 // lib/core/l10n/failure_messages.dart
+import 'dart:math' show max;
+
 import 'package:direto_da_roca/core/error/failure.dart';
+import 'package:direto_da_roca/core/error/failure_kind.dart';
 import 'package:direto_da_roca/l10n/gen/app_localizations.dart';
 
 extension FailureMessages on Failure {
@@ -783,12 +781,18 @@ extension ListingValidationMessages on ValidationFailure {
     final codes = fieldErrors[fieldId];
     if (codes == null) return null;
     return switch (codes) {
-      {ValidationCode.required} => l10n.validationTitleRequired,
-      {ValidationCode.tooShort} => l10n.validationTitleShort,
-      {ValidationCode.tooLong} => l10n.validationTitleLong,
-      {ValidationCode.required, _} => l10n.validationTitleRequired,
-      {ValidationCode.inThePast} => l10n.validationExpiryInThePast,
-      {ValidationCode.notAccepted} => l10n.validationConsentRequired,
+      // Guarda por `contains`, e não map pattern: a chave de um map pattern precisa ser
+      // uma constante, e `ValidationCode.required` é uma constante de enum — o pattern
+      // {ValidationCode.required} não compila. Além disso o campo é `Set`, e Set não
+      // tem igualdade por valor: mesmo que compilasse, um `containsKey` nunca casaria.
+      _ when codes.contains(ValidationCode.required) &&
+              !codes.contains(ValidationCode.notAccepted) =>
+        l10n.validationTitleRequired,
+      _ when codes.contains(ValidationCode.required) &&
+              codes.contains(ValidationCode.notAccepted) =>
+        l10n.validationTitleRequired,
+      _ when codes.contains(ValidationCode.inThePast) => l10n.validationExpiryInThePast,
+      _ when codes.contains(ValidationCode.notAccepted) => l10n.validationConsentRequired,
       _ => l10n.validationInvalid,
     };
   }
@@ -1239,6 +1243,46 @@ final class ContactFailed extends ContactState {
 ```
 
 ```dart
+// lib/features/listings/domain/entities/contact_details.dart
+import 'package:equatable/equatable.dart';
+
+/// O que a Edge Function devolve depois de validar o Turnstile e o rate limit.
+///
+/// Não carrega nada além do telefone e do nome do vendedor: é o retorno da
+/// função `private.get_listing_contact`, que já aplicou o consentimento de
+/// exibição. Nada de `ownerId`, `location` ou `expiresAt` chega aqui.
+final class ContactDetails extends Equatable {
+  const ContactDetails({required this.phoneNumber, this.sellerDisplayName});
+
+  /// Em E.164, só dígitos, pronto para o `wa.me`. A normalização acontece na
+  /// função SQL, não no cliente.
+  final String phoneNumber;
+  final String? sellerDisplayName;
+
+  @override
+  List<Object?> get props => [phoneNumber, sellerDisplayName];
+}
+```
+
+```dart
+// lib/features/listings/domain/repositories/contact_repository.dart
+import 'package:direto_da_roca/core/error/failure.dart';
+import 'package:direto_da_roca/core/error/result.dart';
+import 'package:direto_da_roca/features/listings/domain/entities/contact_details.dart';
+
+abstract interface class ContactRepository {
+  /// Chama a Edge Function de T-1.2b. Devolve `Err` com
+  /// `ContactUnavailableFailure` **tanto** para limite estourado quanto para
+  /// anúncio inexistente — a resposta é uniforme de propósito (D1); distinguish
+  /// os dois viraria oráculo de quais anúncios existem.
+  Future<Result<ContactDetails, Failure>> requestContact({
+    required String listingId,
+    required String turnstileToken,
+  });
+}
+```
+
+```dart
 // lib/features/listings/presentation/blocs/contact/contact_bloc.dart
 import 'package:bloc/bloc.dart';
 
@@ -1525,6 +1569,10 @@ O que foi descartado e por quê:
 
 ```dart
 // lib/core/async/sequential.dart
+import 'dart:async';
+
+import 'package:bloc/bloc.dart';
+
 /// Processa um evento por vez, em ordem. `asyncExpand` já é isso: um evento novo
 /// espera o anterior terminar, em vez de cancelar.
 EventTransformer<E> sequential<E>() => (events, mapper) => events.asyncExpand(mapper);
@@ -1532,23 +1580,42 @@ EventTransformer<E> sequential<E>() => (events, mapper) => events.asyncExpand(ma
 
 ```dart
 // lib/core/async/droppable.dart
+import 'dart:async';
+
+import 'package:bloc/bloc.dart';
+
 /// Descarta o evento enquanto um anterior ainda está em andamento.
 ///
 /// Diferente de `sequential`, que enfileira: aqui a intenção é "este evento não
-/// tem valor agora, Some o resultado". Usar no botão de contato e em
+/// tem valor agora, some o resultado". Usar no botão de contato e em
 /// "carregar mais", onde o custo de repetir é real.
+///
+/// `asyncExpand` serializa por construção: enquanto a stream interna do evento
+/// anterior não fechar, os próximos eventos nem são entregues ao `mapper`.
+/// É por isso que não existe flag `isRunning` — `asyncExpand` já garante a
+/// exclusividade, e um guard manual só criaria uma segunda fonte de verdade.
 EventTransformer<E> droppable<E>() {
-  var isRunning = false;
-  return (events, mapper) => events.asyncExpand((event) {
-    if (isRunning) return const Stream<E>.empty();
-    isRunning = true;
-    return mapper(event)!.onDone(() => isRunning = false);
-  });
+  return (events, mapper) => events.asyncExpand(
+        (event) {
+          final mapped = mapper(event);
+          // `Stream<E>.empty()` **sem** `const`: constante não aceita type
+          // parameter, e `const Stream<E>.empty()` não compila. É a diferença
+          // entre `droppable` funcionar e o projeto não compilar.
+          if (mapped == null) return Stream<E>.empty();
+          // `where` com predicado constante é pass-through; existe só para o tipo
+          // do retorno casar com `Stream<E>`. A serialização vem do `asyncExpand`.
+          return mapped.where((_) => true);
+        },
+      );
 }
 ```
 
 ```dart
 // lib/core/async/restartable.dart
+import 'dart:async';
+
+import 'package:bloc/bloc.dart';
+
 /// Descarta o resultado do evento anterior quando um novo chega.
 ///
 /// O que este transformer resolve: parar de puxar eventos da fila e cancelar a
@@ -1558,36 +1625,58 @@ EventTransformer<E> droppable<E>() {
 /// precisa do guard de geração em §6.4.
 EventTransformer<E> restartable<E>() {
   return (events, mapper) {
+    // `late` não serve aqui: `onDone` fecha o controller antes de qualquer
+    // `start`, e o analisador acusa `definitely unassigned`. O controller é criado
+    // primeiro, e a stream interna é ligada em `onListen`.
     late StreamController<E> controller;
     StreamSubscription<E>? current;
+    StreamSubscription<E>? outer;
     var outerDone = false;
+    var started = false;
+
+    void maybeClose() {
+      if (outerDone && current == null && !controller.isClosed) {
+        controller.close();
+      }
+    }
 
     void start(E event) {
       final mapped = mapper(event);
       if (mapped == null) return;
       current?.cancel();
-      StreamSubscription<E>? started;
-      started = mapped.listen(
+      StreamSubscription<E>? inner;
+      inner = mapped.listen(
         controller.add,
         onError: controller.addError,
         onDone: () {
-          if (identical(current, started)) current = null;
-          if (outerDone && current == null && !controller.isClosed) {
-            controller.close();
-          }
+          if (identical(current, inner)) current = null;
+          maybeClose();
         },
       );
-      current = started;
+      current = inner;
     }
 
-    events.listen(
-      start,
-      onError: controller.addError,
-      onDone: () {
-        outerDone = true;
-        if (current == null && !controller.isClosed) controller.close();
+    controller = StreamController<E>(
+      onListen: () {
+        started = true;
+        outer = events.listen(
+          start,
+          onError: controller.addError,
+          onDone: () {
+            outerDone = true;
+            maybeClose();
+          },
+        );
+      },
+      onCancel: () {
+        outer?.cancel();
+        current?.cancel();
       },
     );
+
+    // Sem eventos e stream já fechado: fecha sozinho, senão o `bloc_test` fica
+    // esperando um `stream` que nunca produz `done`.
+    if (!started) maybeClose();
 
     return controller.stream;
   };
@@ -1598,6 +1687,10 @@ EventTransformer<E> restartable<E>() {
 
 ```dart
 // lib/core/async/debounce.dart
+import 'dart:async';
+
+import 'package:bloc/bloc.dart';
+
 /// Emite o último evento depois de `duration` sem novos eventos.
 ///
 /// Composição: `debounce` **antes** de `restartable`/`droppable`. Na ordem
